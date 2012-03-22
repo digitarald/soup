@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical" >
+
+    <GridView
+        android:id="@+id/grid_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dip"
+        android:layout_weight="1"
+        android:horizontalSpacing="10dp"
+        android:numColumns="auto_fit"
+        android:paddingTop="15dp"
+        android:paddingBottom="15dp"
+        android:stretchMode="spacingWidth"
+        android:verticalSpacing="10dp" />
+
+    <Button
+        android:id="@+id/button_more"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Get more apps" />
+
+</LinearLayout>

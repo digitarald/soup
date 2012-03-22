@@ -2,7 +2,7 @@
 package org.mozilla.labs.Soup.app;
 
 import org.mozilla.labs.Soup.R;
-import org.mozilla.labs.Soup.provider.AppsContract.Apps;
+import org.mozilla.labs.Soup.provider.AppsContract.App;
 
 import android.app.Activity;
 import android.content.Context;
@@ -19,10 +19,10 @@ public class LiveFolderActivity extends Activity {
     /**
      * The URI for the Notes Live Folder content provider.
      */
-    public static final Uri CONTENT_URI = Uri.parse("content://" + Apps.AUTHORITY
+    public static final Uri CONTENT_URI = Uri.parse("content://" + App.AUTHORITY
             + "/live_folders/apps");
 
-    public static final Uri APPS_URI = Uri.parse("content://" + Apps.AUTHORITY + "/apps/#");
+    public static final Uri APPS_URI = Uri.parse("content://" + App.AUTHORITY + "/apps/#");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

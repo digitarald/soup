@@ -12,7 +12,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.mozilla.labs.Soup.app.AppActivity;
 import org.mozilla.labs.Soup.app.SoupApplication;
-import org.mozilla.labs.Soup.provider.AppsContract.Apps;
+import org.mozilla.labs.Soup.provider.AppsContract.App;
 
 import android.content.Intent;
 import android.database.Cursor;
@@ -95,14 +95,13 @@ public class MozAppsMgmtPlugin extends Plugin implements Observer {
     private PluginResult launch(String query) {
 
         String[] projection = new String[] {
-                Apps.ORIGIN, Apps.MANIFEST, Apps.INSTALL_DATA, Apps.INSTALL_ORIGIN,
-                Apps.INSTALL_TIME
+                App.ORIGIN, App.MANIFEST, App.INSTALL_DATA, App.INSTALL_ORIGIN, App.INSTALL_TIME
         };
 
-        Cursor cur = ctx.managedQuery(Apps.CONTENT_URI, projection, Apps.ORIGIN + " = ?",
+        Cursor cur = ctx.managedQuery(App.CONTENT_URI, projection, App.ORIGIN + " = ?",
                 new String[] {
                     query
-                }, Apps.DEFAULT_SORT_ORDER);
+                }, App.DEFAULT_SORT_ORDER);
 
         if (cur.moveToFirst() == false) {
             Log.w(TAG, "Could not find " + query);
@@ -112,12 +111,12 @@ public class MozAppsMgmtPlugin extends Plugin implements Observer {
 
         JSONObject manifest;
         try {
-            manifest = new JSONObject(cur.getString(cur.getColumnIndex(Apps.MANIFEST)));
+            manifest = new JSONObject(cur.getString(cur.getColumnIndex(App.MANIFEST)));
         } catch (JSONException e) {
             return new PluginResult(Status.ERROR);
         }
 
-        String origin = cur.getString(cur.getColumnIndex(Apps.ORIGIN));
+        String origin = cur.getString(cur.getColumnIndex(App.ORIGIN));
         String uri = origin + manifest.optString("launch_path", "/");
         final String name = manifest.optString("name");
 
@@ -150,26 +149,29 @@ public class MozAppsMgmtPlugin extends Plugin implements Observer {
             Log.d(TAG, "getAll update with memory " + allApps.length());
         }
 
-        Cursor cur = ctx.getContentResolver().query(Apps.CONTENT_URI, Apps.APP_PROJECTION, null,
-                null, Apps.DEFAULT_SORT_ORDER);
+        Cursor cur = ctx.getContentResolver().query(App.CONTENT_URI, null, null, null,
+                App.DEFAULT_SORT_ORDER);
 
         cur.moveToFirst();
 
         JSONArray list = new JSONArray();
 
         while (cur.isAfterLast() == false) {
-            JSONObject app = Apps.toJSONObject(cur);
+
+            App app = App.fromCursor(ctx, cur);
 
             if (app != null) {
-                String origin = app.optString("origin");
+                String origin = app.origin;
+
+                JSONObject json = app.toJSON();
 
                 if (!update || !allApps.has(origin)) {
                     try {
-                        allApps.put(origin, app);
-                        installed.put(origin, app);
+                        allApps.put(origin, json);
+                        installed.put(origin, json);
 
                         if (update) {
-                            Log.d(TAG, "getAll update added " + origin);
+                            // Log.d(TAG, "getAll update added " + origin);
                         }
                     } catch (JSONException e) {
                     }
@@ -177,7 +179,7 @@ public class MozAppsMgmtPlugin extends Plugin implements Observer {
 
                 processed.add(origin);
 
-                list.put(app);
+                list.put(json);
             }
 
             cur.moveToNext();

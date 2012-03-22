@@ -17,6 +17,7 @@
 package org.mozilla.labs.Soup.provider;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 
@@ -24,16 +25,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.mozilla.labs.Soup.app.AppActivity;
+import org.mozilla.labs.Soup.http.HttpFactory;
 import org.mozilla.labs.Soup.http.ImageFactory;
 
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
-import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
 import android.util.Log;
 
@@ -45,21 +47,9 @@ public final class AppsContract {
     private static final String TAG = "AppsContract";
 
     /**
-     * Special value for SyncColumns indicating that an entry has never been
-     * updated, or doesn't exist yet.
-     */
-    public static final long UPDATED_NEVER = -2;
-
-    /**
-     * Special value for SyncColumns indicating that the last update time is
-     * unknown, usually when inserted from a local file source.
-     */
-    public static final long UPDATED_UNKNOWN = -1;
-
-    /**
      * Apps table
      */
-    public static final class Apps implements BaseColumns {
+    public static final class App implements BaseColumns {
 
         public static final String AUTHORITY = "org.mozilla.labs.Soup.provider.AppsProvider";
 
@@ -94,25 +84,31 @@ public final class AppsContract {
 
         public static final String DESCRIPTION = "description";
 
+        public static final String LAUNCH_PATH = "launch_path";
+
         public static final String ICON = "icon";
 
         public static final String INSTALL_DATA = "install_data";
 
         public static final String INSTALL_ORIGIN = "install_origin";
 
-        public static final String INSTALL_RECEIPT = "receipt";
+        public static final String INSTALL_TIME = "install_date";
 
-        public static final String INSTALL_TIME = "install_time";
+        public static final String INSTALL_STATUS = "install_status";
 
-        public static final String SYNCED_DATE = "synced_date";
+        public static final String RECEIPT = "receipt";
 
-        public static final String STATUS = "status";
+        public static final String MANIFEST_DATE = "manifest_date";
 
-        public static enum STATUS_ENUM {
-            OK, DELETED
-        }
+        public static final String SYNC_STATUS = "sync_status";
+
+        public static final String SYNC_DATE = "sync_date";
+
+        public static final String INSTALL_LOCAL_DATE = "install_local_date";
 
         public static final String VERIFIED_DATE = "verified_date";
+
+        public static final String LAUNCHED_DATE = "launched_date";
 
         /**
          * The timestamp for when the app was created
@@ -130,43 +126,273 @@ public final class AppsContract {
          */
         public static final String MODIFIED_DATE = "modified_date";
 
-        public final static String[] APP_PROJECTION = new String[] {
-                Apps._ID, Apps.ORIGIN, Apps.MANIFEST, Apps.MANIFEST_URL, Apps.INSTALL_DATA,
-                Apps.INSTALL_ORIGIN, Apps.INSTALL_TIME, Apps.MODIFIED_DATE, Apps.STATUS
-        };
-
-        public static JSONObject toJSONObject(Cursor cur) {
-            return toJSONObject(cur, false);
+        public static enum STATUS_ENUM {
+            OK, DELETED, UNKNOWN
         }
 
-        public static JSONObject toJSONObject(Cursor cur, boolean extended) {
-            boolean deleted = (cur.getInt(cur.getColumnIndex(Apps.STATUS)) == STATUS_ENUM.DELETED
-                    .ordinal());
+        public Long id = null;
 
-            // Skip deleted entries for non-sync use
-            if (!extended && deleted) {
-                Log.d(TAG, "toJSONObject skipped entry");
+        public String origin = null;
+
+        public JSONObject manifest = new JSONObject();
+
+        public String manifestUrl = null;
+
+        public String name = null;
+
+        public String description = null;
+
+        public String launchPath = null;
+
+        public Bitmap icon = null;
+
+        public JSONObject installData = new JSONObject();
+
+        public String installOrigin = null;
+
+        public Calendar installTime = null;
+
+        public STATUS_ENUM installStatus = STATUS_ENUM.UNKNOWN;
+
+        public JSONArray receipt = new JSONArray();
+
+        public Calendar manifestDate = null;
+
+        public STATUS_ENUM syncStatus = STATUS_ENUM.UNKNOWN;
+
+        public Calendar syncDate = null;
+
+        public Calendar localInstallDate = null;
+
+        public Calendar verifiedDate = null;
+
+        public Calendar launchedDate = null;
+
+        public Calendar createdDate = null;
+
+        public Calendar modifiedDate = null;
+
+        public Calendar installLocalDate = null;
+
+        App() {
+        }
+
+        public static App fromCursor(Context ctx, Cursor cur) {
+
+            App app = new App();
+
+            app.id = cur.getLong(cur.getColumnIndex(App._ID));
+
+            app.origin = cur.getString(cur.getColumnIndex(App.ORIGIN));
+            try {
+                app.manifest = new JSONObject(cur.getString(cur.getColumnIndex(App.MANIFEST)));
+            } catch (JSONException e) {
+            }
+            app.manifestUrl = cur.getString(cur.getColumnIndex(App.MANIFEST_URL));
+            app.name = cur.getString(cur.getColumnIndex(App.NAME));
+            app.description = cur.getString(cur.getColumnIndex(App.DESCRIPTION));
+            app.launchPath = cur.getString(cur.getColumnIndex(App.LAUNCH_PATH));
+
+            // TODO Store Bitmap or just Blob?
+            final byte[] imageDate = cur.getBlob(cur.getColumnIndex(App.ICON));
+
+            if (imageDate != null) {
+                app.icon = BitmapFactory.decodeByteArray(imageDate, 0, imageDate.length);
+            }
+
+            try {
+                app.installData = new JSONObject(
+                        cur.getString(cur.getColumnIndex(App.INSTALL_DATA)));
+            } catch (JSONException e) {
+            }
+
+            app.installOrigin = cur.getString(cur.getColumnIndex(App.INSTALL_ORIGIN));
+
+            final int installTime = cur.getInt(cur.getColumnIndex(App.INSTALL_TIME));
+
+            if (installTime > 0) {
+                app.installTime = Calendar.getInstance();
+                app.installTime.setTimeInMillis(installTime);
+            }
+
+            final int installStatus = cur.getInt(cur.getColumnIndex(App.INSTALL_STATUS));
+            app.installStatus = App.STATUS_ENUM.values()[installStatus];
+
+            try {
+                app.receipt = new JSONArray(cur.getString(cur.getColumnIndex(App.RECEIPT)));
+            } catch (JSONException e) {
+            }
+
+            final int manifestDate = cur.getInt(cur.getColumnIndex(App.MANIFEST_DATE));
+
+            if (manifestDate > 0) {
+                app.manifestDate = Calendar.getInstance();
+                app.manifestDate.setTimeInMillis(manifestDate);
+            }
+
+            final int syncStatus = cur.getInt(cur.getColumnIndex(App.SYNC_STATUS));
+            app.syncStatus = App.STATUS_ENUM.values()[syncStatus];
+
+            final int syncDate = cur.getInt(cur.getColumnIndex(App.SYNC_DATE));
+
+            if (syncDate > 0) {
+                app.syncDate = Calendar.getInstance();
+                app.syncDate.setTimeInMillis(syncDate);
+            }
+
+            final int installLocalDate = cur.getInt(cur.getColumnIndex(App.INSTALL_LOCAL_DATE));
+
+            if (installLocalDate > 0) {
+                app.installLocalDate = Calendar.getInstance();
+                app.installLocalDate.setTimeInMillis(installLocalDate);
+            }
+
+            final int verifiedDate = cur.getInt(cur.getColumnIndex(App.VERIFIED_DATE));
+
+            if (verifiedDate > 0) {
+                app.verifiedDate = Calendar.getInstance();
+                app.verifiedDate.setTimeInMillis(verifiedDate);
+            }
+
+            final int launchedDate = cur.getInt(cur.getColumnIndex(App.LAUNCHED_DATE));
+
+            if (launchedDate > 0) {
+                app.launchedDate = Calendar.getInstance();
+                app.launchedDate.setTimeInMillis(launchedDate);
+            }
+
+            return app;
+        }
+
+        public static App fromManifestUri(Context ctx, String manifestUri, JSONObject installData,
+                String installUrl) {
+
+            final Uri originUri = Uri.parse(manifestUri);
+
+            if (originUri == null || originUri.getHost() == null) {
+                Log.e(TAG, "Faulty originUri: " + originUri);
                 return null;
             }
 
-            String manifest = cur.getString(cur.getColumnIndex(Apps.MANIFEST));
+            final Uri installUri = Uri.parse(installUrl);
+
+            if (installUri == null || installUri.getHost() == null) {
+                Log.e(TAG, "Faulty installUri: " + installUri);
+                return null;
+            }
+
+            final String manifestOrigin = originUri.getScheme() + "://" + originUri.getAuthority();
+
+            // Check against existing apps
+
+            App app = App.findAppByOrigin(ctx, manifestOrigin);
+
+            if (app == null) {
+                app = new App();
+            }
+
+            // TODO: More error codes (JSON vs IO)
+            final JSONObject manifest = HttpFactory.getManifest(ctx, manifestUri);
+
+            app.name = manifest.optString("name", originUri.getHost());
+            app.description = manifest.optString("description", "");
+
+            app.launchPath = manifestOrigin + manifest.optString("launch_path", "/");
+
+            app.origin = manifestOrigin;
+            app.manifestUrl = manifestUri;
+            app.manifest = manifest;
+
+            // TODO: Fails for iframes
+            final String installOrigin = installUri.getScheme() + "://" + installUri.getAuthority();
+
+            app.installOrigin = installOrigin;
+
+            if (installData != null) {
+
+                app.installData = installData;
+
+                if (installData.has("receipt")) {
+                    app.receipt = installData.optJSONArray("receipt");
+                }
+            }
+
+            app.manifestDate = Calendar.getInstance();
+
+            app.fetchIcon(ctx);
+
+            Log.d(TAG, "Icon set: " + (app.icon != null));
+
+            return app;
+        }
+
+        public Intent getIntent(Context ctx) {
+
+            Intent intent = new Intent(ctx, AppActivity.class);
+            intent.setAction(AppActivity.ACTION_WEBAPP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            intent.putExtra("origin", origin);
+            intent.putExtra("uri", launchPath);
+
+            return intent;
+
+        }
+
+        public void createShortcut(Context ctx) {
+
+            Intent intent = new Intent();
+            intent.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+            intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, getIntent(ctx));
+            intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+
+            if (icon != null) {
+                intent.putExtra(Intent.EXTRA_SHORTCUT_ICON, icon);
+            }
+
+            // Disallow the creation of duplicate
+            // shortcuts (i.e. same
+            // url, same title, but different screen
+            // position).
+            intent.putExtra("duplicate", false);
+
+            ctx.sendBroadcast(intent);
+
+        }
+
+        public JSONObject toJSON() {
+            return toJSON(false);
+        }
+
+        public JSONObject toJSON(boolean includeDeleted) {
+            boolean deleted = (syncStatus == STATUS_ENUM.DELETED);
+
+            // Skip deleted entries for non-sync use
+            if (!includeDeleted && deleted) {
+                return null;
+            }
 
             JSONObject app = new JSONObject();
 
             try {
-                app.put("origin", cur.getString(cur.getColumnIndex(Apps.ORIGIN)));
-                app.put("manifest", new JSONObject(manifest));
-                app.put("manifest_url", cur.getString(cur.getColumnIndex(Apps.MANIFEST_URL)));
-                app.put("install_data", cur.getString(cur.getColumnIndex(Apps.INSTALL_DATA)));
-                app.put("install_origin", cur.getString(cur.getColumnIndex(Apps.INSTALL_ORIGIN)));
-                app.put("install_time",
-                        Long.valueOf(cur.getLong(cur.getColumnIndex(Apps.INSTALL_TIME)) / 1000));
 
-                if (extended) {
-                    app.put("last_modified", Long.valueOf(cur.getLong(cur
-                            .getColumnIndex(Apps.MODIFIED_DATE)) / 1000));
+                app.put("origin", origin);
+                app.put("manifest", manifest);
+                app.put("manifest_url", manifestUrl);
+                app.put("install_data", installData);
+                app.put("install_origin", installOrigin);
+
+                if (installTime != null) {
+                    app.put("install_time", Long.valueOf(installTime.getTimeInMillis() / 1000));
+                } else {
+
+                }
+
+                if (includeDeleted) {
+                    app.put("last_modified", Long.valueOf(modifiedDate.getTimeInMillis() / 1000));
                     app.put("deleted", deleted);
                 }
+
             } catch (JSONException e) {
                 return null;
             }
@@ -174,130 +400,123 @@ public final class AppsContract {
             return app;
         }
 
-        public static ContentValues toContentValues(Context ctx, final JSONObject app, Boolean install) {
-
-            String origin = app.optString("origin");
-            JSONObject manifest = app.optJSONObject("manifest");
-
-            if (origin == null) {
-                Log.w(TAG, "Origin was null");
-                return null;
-            }
+        public ContentValues toContentValues(Context ctx) {
 
             ContentValues values = new ContentValues();
-            
-            Bitmap bitmap = null;
 
-            if (manifest != null) {
-                values.put(Apps.NAME, manifest.optString("name"));
-                values.put(Apps.DESCRIPTION, manifest.optString("description"));
+            values.put(App.ORIGIN, origin);
 
-                bitmap = Apps.fetchIconByApp(ctx, origin, manifest);
+            values.put(App.MANIFEST, manifest.toString());
+            values.put(App.MANIFEST_URL, manifestUrl);
 
-                if (bitmap != null) {
-                    values.put(Apps.ICON, ImageFactory.bitmapToBytes(bitmap));
-                }
+            values.put(App.NAME, name);
+            values.put(App.DESCRIPTION, description);
 
-                values.put(Apps.MANIFEST_URL, app.optString("manifest_url"));
-                values.put(Apps.MANIFEST, manifest.toString());
-            }
+            values.put(App.LAUNCH_PATH, launchPath);
 
-            values.put(Apps.ORIGIN, origin);
-
-            long installTime = app.optLong("install_time");
-            if (installTime < 1) {
-                installTime = Long.valueOf(System.currentTimeMillis() / 1000);
-            }
-            values.put(Apps.INSTALL_TIME, installTime * 1000);
-
-            if (app.optBoolean("deleted")) {
-                values.put(Apps.STATUS, STATUS_ENUM.DELETED.ordinal());
-            } else {
-                values.put(Apps.STATUS, STATUS_ENUM.OK.ordinal());
-            }
-
-            JSONObject installData = null;
-            try {
-                installData = new JSONObject(app.optString("install_data"));
-            } catch (Exception e) {
+            if (icon != null) {
+                values.put(App.ICON, ImageFactory.bitmapToBytes(icon));
             }
 
             if (installData != null) {
-                values.put(Apps.INSTALL_DATA, installData.toString());
-                if (installData.has("receipt")) {
-                    values.put(Apps.INSTALL_RECEIPT, installData.optString("receipt"));
-                }
+                values.put(App.INSTALL_DATA, installData.toString());
             } else {
-                values.put(Apps.INSTALL_DATA, new JSONObject().toString());
+                values.put(App.INSTALL_DATA, new JSONObject().toString());
             }
-            
-            if (manifest != null && install) {
-                
-                String launchUri = origin;
-                if (manifest.has("launch_path")) {
-                    launchUri += manifest.optString("launch_path");
-                }
 
-                Intent shortcutIntent = new Intent(ctx, AppActivity.class);
-                shortcutIntent.setAction(AppActivity.ACTION_WEBAPP);
-                shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                shortcutIntent.putExtra("uri", launchUri);
+            values.put(App.INSTALL_ORIGIN, installOrigin);
 
-                final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+            if (installTime != null) {
+                values.put(App.INSTALL_TIME, installTime.getTimeInMillis());
+            }
 
-                if (prefs.getBoolean("install_shortcut_sync", false)) {
-                    Log.d(TAG, "Install creates shortcut");
+            values.put(App.INSTALL_STATUS, installStatus.ordinal());
 
-                    Intent intent = new Intent();
-                    intent.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
-                    intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcutIntent);
-                    intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, manifest.optString("name", "No Name"));
-                    if (bitmap != null) {
-                        intent.putExtra(Intent.EXTRA_SHORTCUT_ICON, bitmap);
-                    }
-                    // Disallow the creation of duplicate
-                    // shortcuts (i.e. same
-                    // url, same title, but different screen
-                    // position).
-                    intent.putExtra("duplicate", false);
+            if (receipt != null) {
+                values.put(App.RECEIPT, receipt.toString());
+            } else {
+                values.put(App.RECEIPT, new JSONArray().toString());
+            }
 
-                    ctx.sendBroadcast(intent);
-                }
+            if (manifestDate != null) {
+                values.put(App.MANIFEST_DATE, manifestDate.getTimeInMillis());
+            }
+
+            values.put(App.SYNC_STATUS, syncStatus.ordinal());
+
+            if (syncDate != null) {
+                values.put(App.SYNC_DATE, syncDate.getTimeInMillis());
+            }
+
+            if (localInstallDate != null) {
+                values.put(App.INSTALL_LOCAL_DATE, localInstallDate.getTimeInMillis());
+            }
+
+            if (verifiedDate != null) {
+                values.put(App.VERIFIED_DATE, verifiedDate.getTimeInMillis());
+            }
+
+            if (launchedDate != null) {
+                values.put(App.LAUNCHED_DATE, launchedDate.getTimeInMillis());
             }
 
             return values;
         }
 
-        public static Cursor findAppByOrigin(Context ctx, String origin) {
-            return findAppByOrigin(ctx, origin, false);
-        }
+        public static App findAppByOrigin(Context ctx, String origin) {
 
-        public static Cursor findAppByOrigin(Context ctx, String origin, Boolean installOrigin) {
-
-            String field = Apps.ORIGIN;
-            if (installOrigin) {
-                field = Apps.INSTALL_ORIGIN;
-            }
-
-            Cursor cur = ctx.getContentResolver().query(Apps.CONTENT_URI, Apps.APP_PROJECTION,
-                    field + " = ?", new String[] {
+            Cursor cur = ctx.getContentResolver().query(App.CONTENT_URI, null, App.ORIGIN + " = ?",
+                    new String[] {
                         origin
-                    }, Apps.DEFAULT_SORT_ORDER);
+                    }, App.DEFAULT_SORT_ORDER);
 
             if (cur.moveToFirst() == false) {
                 cur.close();
                 return null;
             }
 
-            return cur;
+            App app = App.fromCursor(ctx, cur);
+
+            cur.close();
+
+            return app;
         }
 
-        public static Bitmap fetchIconByApp(Context ctx, String origin, JSONObject manifest) {
+        public static List<App> findAppsByInstallOrigin(Context ctx, String origin) {
+
+            Cursor cur = ctx.getContentResolver().query(App.CONTENT_URI, null,
+                    App.INSTALL_ORIGIN + " = ?", new String[] {
+                        origin
+                    }, App.DEFAULT_SORT_ORDER);
+
+            List<App> list = new ArrayList<App>();
+
+            if (cur.moveToFirst() != false) {
+
+                while (cur.isAfterLast() == false) {
+                    App app = App.fromCursor(ctx, cur);
+
+                    if (app != null) {
+                        list.add(app);
+                    }
+
+                    cur.moveToNext();
+                }
+
+            }
+
+            cur.close();
+
+            return list;
+        }
+
+        public void fetchIcon(Context ctx) {
 
             JSONObject icons = manifest.optJSONObject("icons");
 
             if (icons == null || icons.length() == 0) {
-                return null;
+                Log.d(TAG, "fetchIcon: No icons found");
+                return;
             }
 
             JSONArray sizes = icons.names();
@@ -317,11 +536,34 @@ public final class AppsContract {
                 iconUrl = origin + iconUrl;
             }
 
-            Log.d(TAG, "Fetching icon " + max + ": " + iconUrl);
+            Log.d(TAG, "fetchIcon: Fetching icon " + max + ": " + iconUrl);
 
             int iconSize = (int)(48 * ctx.getResources().getDisplayMetrics().density);
 
-            return ImageFactory.getResizedImage(iconUrl, iconSize, iconSize);
+            icon = ImageFactory.getResizedImage(iconUrl, iconSize, iconSize);
+        }
+
+        public boolean save(Context ctx) {
+
+            Uri uri = null;
+
+            try {
+                if (id != null) {
+                    uri = ContentUris.withAppendedId(App.CONTENT_URI, id);
+                    ctx.getContentResolver().update(uri, toContentValues(ctx), null, null);
+                } else {
+                    uri = ctx.getContentResolver().insert(App.CONTENT_URI, toContentValues(ctx));
+
+                    id = ContentUris.parseId(uri);
+                }
+
+            } catch (Exception e) {
+
+                Log.e(TAG, "Installation failed for " + origin, e);
+                return false;
+            }
+
+            return true;
         }
 
     }

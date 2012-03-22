@@ -192,7 +192,7 @@ public class SoupApplication extends Application {
     }
 
     public void triggerSync() {
-        syncManager.startSync();
+        // syncManager.startSync();
     }
 
     public void clearData(SoupActivity activity) {
